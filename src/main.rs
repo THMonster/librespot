@@ -203,6 +203,7 @@ fn get_setup(args: &[String]) -> Setup {
     const DEVICE: &str = "device";
     const DEVICE_TYPE: &str = "device-type";
     const DISABLE_AUDIO_CACHE: &str = "disable-audio-cache";
+    const DISABLE_CREDENTIAL_CACHE: &str = "disable-credential-cache";
     const DISABLE_DISCOVERY: &str = "disable-discovery";
     const DISABLE_GAPLESS: &str = "disable-gapless";
     const DITHER: &str = "dither";
@@ -248,7 +249,7 @@ fn get_setup(args: &[String]) -> Setup {
     ).optopt(
         "",
         SYSTEM_CACHE,
-        "Path to a directory where system files (credentials, volume) will be cached. Can be different from cache option value.",
+        "Path to a directory where system files (credentials, volume) will be cached. May be different from the cache option value.",
         "PATH",
     ).optopt(
         "",
@@ -256,8 +257,9 @@ fn get_setup(args: &[String]) -> Setup {
         "Limits the size of the cache for audio files.",
         "SIZE"
     ).optflag("", DISABLE_AUDIO_CACHE, "Disable caching of the audio data.")
+    .optflag("", DISABLE_CREDENTIAL_CACHE, "Disable caching of credentials.")
     .optopt("n", NAME, "Device name.", "NAME")
-    .optopt("", DEVICE_TYPE, "Displayed device type.", "TYPE")
+    .optopt("", DEVICE_TYPE, "Displayed device type. Defaults to 'Speaker'.", "TYPE")
     .optopt(
         BITRATE,
         "bitrate",
@@ -270,14 +272,14 @@ fn get_setup(args: &[String]) -> Setup {
         "Run PROGRAM when a playback event occurs.",
         "PROGRAM",
     )
-    .optflag("", EMIT_SINK_EVENTS, "Run program set by --onevent before sink is opened and after it is closed.")
+    .optflag("", EMIT_SINK_EVENTS, "Run PROGRAM set by --onevent before sink is opened and after it is closed.")
     .optflag("v", VERBOSE, "Enable verbose output.")
     .optflag("V", VERSION, "Display librespot version string.")
-    .optopt("u", USERNAME, "Username to sign in with.", "USERNAME")
-    .optopt("p", PASSWORD, "Password", "PASSWORD")
+    .optopt("u", USERNAME, "Username used to sign in with.", "USERNAME")
+    .optopt("p", PASSWORD, "Password used to sign in with.", "PASSWORD")
     .optopt("", PROXY, "HTTP proxy to use when connecting.", "URL")
-    .optopt("", AP_PORT, "Connect to AP with specified port. If no AP with that port are present fallback AP will be used. Available ports are usually 80, 443 and 4070.", "PORT")
-    .optflag("", DISABLE_DISCOVERY, "Disable discovery mode.")
+    .optopt("", AP_PORT, "Connect to an AP with a specified port. If no AP with that port is present a fallback AP will be used. Available ports are usually 80, 443 and 4070.", "PORT")
+    .optflag("", DISABLE_DISCOVERY, "Disable zeroconf discovery mode.")
     .optopt(
         "",
         BACKEND,
@@ -287,7 +289,7 @@ fn get_setup(args: &[String]) -> Setup {
     .optopt(
         "",
         DEVICE,
-        "Audio device to use. Use '?' to list options if using alsa, portaudio or rodio.",
+        "Audio device to use. Use '?' to list options if using alsa, portaudio or rodio. Defaults to the backend's default.",
         "NAME",
     )
     .optopt(
@@ -299,10 +301,10 @@ fn get_setup(args: &[String]) -> Setup {
     .optopt(
         "",
         DITHER,
-        "Specify the dither algorithm to use - [none, gpdf, tpdf, tpdf_hp]. Defaults to 'tpdf' for formats S16, S24, S24_3 and 'none' for other formats.",
+        "Specify the dither algorithm to use {none|gpdf|tpdf|tpdf_hp}. Defaults to 'tpdf' for formats S16, S24, S24_3 and 'none' for other formats.",
         "DITHER",
     )
-    .optopt("m", MIXER_TYPE, "Mixer to use {alsa|softvol}.", "MIXER")
+    .optopt("m", MIXER_TYPE, "Mixer to use {alsa|softvol}. Defaults to softvol", "MIXER")
     .optopt(
         "",
         "mixer-name", // deprecated
@@ -312,7 +314,7 @@ fn get_setup(args: &[String]) -> Setup {
     .optopt(
         "",
         ALSA_MIXER_CONTROL,
-        "Alsa mixer control, e.g. 'PCM' or 'Master'. Defaults to 'PCM'.",
+        "Alsa mixer control, e.g. 'PCM', 'Master' or similar. Defaults to 'PCM'.",
         "NAME",
     )
     .optopt(
@@ -348,13 +350,13 @@ fn get_setup(args: &[String]) -> Setup {
     .optopt(
         "",
         ZEROCONF_PORT,
-        "The port the internal server advertised over zeroconf uses.",
+        "The port the internal server advertises over zeroconf.",
         "PORT",
     )
     .optflag(
         "",
         ENABLE_VOLUME_NORMALISATION,
-        "Play all tracks at the same volume.",
+        "Play all tracks at approximately the same apparent volume.",
     )
     .optopt(
         "",
@@ -377,19 +379,19 @@ fn get_setup(args: &[String]) -> Setup {
     .optopt(
         "",
         NORMALISATION_THRESHOLD,
-        "Threshold (dBFS) to prevent clipping. Defaults to -2.0.",
+        "Threshold (dBFS) at which the dynamic limiter engages to prevent clipping. Defaults to -2.0.",
         "THRESHOLD",
     )
     .optopt(
         "",
         NORMALISATION_ATTACK,
-        "Attack time (ms) in which the dynamic limiter is reducing gain. Defaults to 5.",
+        "Attack time (ms) in which the dynamic limiter reduces gain. Defaults to 5.",
         "TIME",
     )
     .optopt(
         "",
         NORMALISATION_RELEASE,
-        "Release or decay time (ms) in which the dynamic limiter is restoring gain. Defaults to 100.",
+        "Release or decay time (ms) in which the dynamic limiter restores gain. Defaults to 100.",
         "TIME",
     )
     .optopt(
@@ -401,7 +403,7 @@ fn get_setup(args: &[String]) -> Setup {
     .optopt(
         "",
         VOLUME_CTRL,
-        "Volume control type {cubic|fixed|linear|log}. Defaults to log.",
+        "Volume control scale type {cubic|fixed|linear|log}. Defaults to log.",
         "VOLUME_CTRL"
     )
     .optopt(
@@ -423,7 +425,7 @@ fn get_setup(args: &[String]) -> Setup {
     .optflag(
         "",
         PASSTHROUGH,
-        "Pass raw stream to output, only works for pipe and subprocess.",
+        "Pass a raw stream to the output. Only works with the pipe and subprocess backends.",
     );
 
     let matches = match opts.parse(&args[1..]) {
@@ -559,24 +561,25 @@ fn get_setup(args: &[String]) -> Setup {
     };
 
     let cache = {
-        let audio_dir;
-        let system_dir;
-        if matches.opt_present(DISABLE_AUDIO_CACHE) {
-            audio_dir = None;
-            system_dir = matches
-                .opt_str(SYSTEM_CACHE)
-                .or_else(|| matches.opt_str(CACHE))
-                .map(|p| p.into());
+        let volume_dir = matches
+            .opt_str(SYSTEM_CACHE)
+            .or_else(|| matches.opt_str(CACHE))
+            .map(|p| p.into());
+
+        let cred_dir = if matches.opt_present(DISABLE_CREDENTIAL_CACHE) {
+            None
         } else {
-            let cache_dir = matches.opt_str(CACHE);
-            audio_dir = cache_dir
+            volume_dir.clone()
+        };
+
+        let audio_dir = if matches.opt_present(DISABLE_AUDIO_CACHE) {
+            None
+        } else {
+            matches
+                .opt_str(CACHE)
                 .as_ref()
-                .map(|p| AsRef::<Path>::as_ref(p).join("files"));
-            system_dir = matches
-                .opt_str(SYSTEM_CACHE)
-                .or(cache_dir)
-                .map(|p| p.into());
-        }
+                .map(|p| AsRef::<Path>::as_ref(p).join("files"))
+        };
 
         let limit = if audio_dir.is_some() {
             matches
@@ -593,7 +596,7 @@ fn get_setup(args: &[String]) -> Setup {
             None
         };
 
-        match Cache::new(system_dir, audio_dir, limit) {
+        match Cache::new(cred_dir, volume_dir, audio_dir, limit) {
             Ok(cache) => Some(cache),
             Err(e) => {
                 warn!("Cannot create cache: {}", e);
@@ -643,6 +646,11 @@ fn get_setup(args: &[String]) -> Setup {
             password,
         )
     };
+
+    if credentials.is_none() && matches.opt_present(DISABLE_DISCOVERY) {
+        error!("Credentials are required if discovery is disabled.");
+        exit(1);
+    }
 
     let session_config = {
         let device_id = device_id(&name);
@@ -920,7 +928,8 @@ async fn main() {
                     player_event_channel = Some(event_channel);
                 },
                 Err(e) => {
-                    warn!("Connection failed: {}", e);
+                    error!("Connection failed: {}", e);
+                    exit(1);
                 }
             },
             _ = async { spirc_task.as_mut().unwrap().await }, if spirc_task.is_some() => {
